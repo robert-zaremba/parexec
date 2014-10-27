@@ -38,3 +38,14 @@ func TestAcquireTimeout(t *testing.T) {
 	}
 	sem.Release()
 }
+
+func BenchmarkSemaphore(b *testing.B) {
+	sem := NewSemaphore(2)
+	job := func(i int) {
+		sem.Release()
+	}
+	for i := 0; i < TOTALBENCH; i++ {
+		sem.Acquire()
+		go job(i)
+	}
+}

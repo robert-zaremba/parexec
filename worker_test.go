@@ -2,6 +2,7 @@ package parexec
 
 import (
 	"fmt"
+	"testing"
 	"time"
 )
 
@@ -49,4 +50,55 @@ func ExampleSimpleRun() {
 	// 3
 	// closing
 	// closing
+}
+
+func ExampleSimpleRun_singleloop() {
+	var jobs = make(chan int)
+	var results = make(chan int, 2)
+	work := func(stop <-chan bool) {
+		var j int
+		for {
+			select {
+			case j = <-jobs:
+				results <- j
+			case <-stop:
+				return
+			}
+		}
+	}
+	stop := SimpleRun(2, work)
+	// fill jobs and get results at once
+	for i := 0; i < TOTALBENCH; i++ {
+		select {
+		case jobs <- i:
+		case <-results:
+			i++
+		}
+	}
+	close(stop)
+}
+
+func BenchmarkSimpleRun_with_results(*testing.B) {
+	ExampleSimpleRun_singleloop()
+}
+
+func BenchmarkSimpleRun(*testing.B) {
+	var jobs = make(chan int)
+	work := func(stop <-chan bool) {
+		for {
+			select {
+			case <-jobs:
+			case <-stop:
+				return
+			}
+		}
+	}
+	stop := SimpleRun(2, work)
+	for i := 0; i < TOTALBENCH; i++ {
+		select {
+		case jobs <- i:
+			i++
+		}
+	}
+	close(stop)
 }
