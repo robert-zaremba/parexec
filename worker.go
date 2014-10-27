@@ -1,8 +1,8 @@
 package parexec
 
-// SimpleWorker is a job function which accepts a *stop* channel and should
-// listens on it. When stop channel is closed (it returns something) then
-// the function should return.
+// SimpleWorker is a job function type which accepts a *stop* channel. The function
+// should listen on it. When stop channel is closed (it returns something) then
+// the function should return as well. Check `SimpleRun` function for an example.
 type SimpleWorker func(chan bool)
 
 // SimpleRun runs `num` workers in separate go routines.
@@ -11,12 +11,13 @@ type SimpleWorker func(chan bool)
 //
 //    jobs    = make(chan Job)
 //    results = make(chan bool)
-//    func work(done chan bool) {
+//    func work(stop chan bool) {
 //    	for {
 //    		select {
 //    		case j := <-jobs:
 //    			results<- doSomething(j)
-//    		case <-done:
+//    		case <-stop:
+//    			return
 //    		}
 //    	}
 //    }
