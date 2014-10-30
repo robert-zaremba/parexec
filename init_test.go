@@ -4,7 +4,7 @@ import (
 	"runtime"
 )
 
-const TOTALBENCH = 2000000
+const TOTALBENCH = 200000
 
 func init() {
 	runtime.GOMAXPROCS(runtime.NumCPU())

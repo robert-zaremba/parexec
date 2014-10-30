@@ -1,6 +1,8 @@
 // Package parexec provides functions/workers to execute calls concurrently
 // with options to limit a number of workers/executors.
 //
+// More interesting patterns you can find at http://blog.golang.org/pipelines
+//
 // Check *_test.go files for examples and benchmarks.
 // Benchmark results:
 //    BenchmarkSemaphore-4               2000000000  0.33 ns/op

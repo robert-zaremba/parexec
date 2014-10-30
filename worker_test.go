@@ -2,6 +2,7 @@ package parexec
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 )
@@ -27,19 +28,22 @@ func ExampleSimpleRun() {
 			}
 		}
 	}
-	stop := SimpleRun(2, work)
+	done := func() {
+		close(jobs)
+	}
+	stop := SimpleRun(2, work, done)
 	// fill jobs
 	for i := 0; i < total; i++ {
 		jobs <- &Job{Name: fmt.Sprint(i), Duration: i * 1000}
 	}
-	counter := 0
-	for r := range results {
+	// you can't use this: close(results); for r := range results
+	// because close(results) is not safe - there might be active goroutine
+	// which didn't get stop signal and tries to write to results
+	for i := 0; i < total; i++ {
+		r := <-results
 		fmt.Println(r)
-		if counter++; counter >= total {
-			close(stop)
-			break
-		}
 	}
+	close(stop)
 	// Wait for closing workers.
 	// Normally you should do it with separate channel (in a clojure, handled in `case <-stop:`) to get acknowledges
 	time.Sleep(200000)
@@ -54,51 +58,74 @@ func ExampleSimpleRun() {
 
 func ExampleSimpleRun_singleloop() {
 	var jobs = make(chan int)
-	var results = make(chan int, 2)
+	var results = make(chan int)
 	work := func(stop <-chan bool) {
-		var j int
 		for {
 			select {
-			case j = <-jobs:
+			case j := <-jobs:
 				results <- j
 			case <-stop:
 				return
 			}
 		}
 	}
-	stop := SimpleRun(2, work)
-	// fill jobs and get results at once
-	for i := 0; i < TOTALBENCH; i++ {
+	done := func() {
+		close(results)
+	}
+	stop := SimpleRun(2, work, done)
+	sum, r := 0, 0
+	for i := 0; i < TOTALBENCH; {
 		select {
 		case jobs <- i:
-		case <-results:
 			i++
+		case r = <-results:
+			sum += r
 		}
 	}
-	close(stop)
+	close(stop) // we need to manually stop to automatically stop results when all workers will finish
+	for r = range results {
+		sum += r
+	}
 }
 
-func BenchmarkSimpleRun_with_results(*testing.B) {
-	ExampleSimpleRun_singleloop()
+// ExampleSimpleRun_raw present the same computation as ExampleSimpleRun_singleloop
+// without using SimpleRun function and stop channel.
+func ExampleSimpleRun_raw() {
+	var jobs = make(chan int)
+	var results = make(chan int)
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			for j := range jobs {
+				results <- j
+			}
+			wg.Done()
+		}()
+	}
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+	sum, r := 0, 0
+	for i := 0; i < TOTALBENCH; {
+		select {
+		case jobs <- i:
+			i++
+		case r = <-results:
+			sum += r
+		}
+	}
+	close(jobs) // we need to close jobs to stop workers and close results
+	for r = range results {
+		sum += r
+	}
 }
 
 func BenchmarkSimpleRun(*testing.B) {
-	var jobs = make(chan int)
-	work := func(stop <-chan bool) {
-		for {
-			select {
-			case <-jobs:
-			case <-stop:
-				return
-			}
-		}
-	}
-	stop := SimpleRun(2, work)
-	for i := 0; i < TOTALBENCH; i++ {
-		select {
-		case jobs <- i:
-			i++
-		}
-	}
-	close(stop)
+	ExampleSimpleRun_singleloop()
+}
+
+func BenchmarkSimpleRun_raw(*testing.B) {
+	ExampleSimpleRun_raw()
 }
