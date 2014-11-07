@@ -6,33 +6,36 @@ import (
 	"time"
 )
 
-type semaphore struct {
+// Semaphore is a structure which implements a semaphore pattern.
+// It is used to limit the number of used resources to `max`. To ask for a resource
+// you firstly need to call `Asquire` and when you finish a job you need to release
+// a right for resource by calling `Release`.
+//
+// You should use `NewSemaphore` function to create new instance.
+type Semaphore struct {
 	max      int
 	acquired int
 	cond     *sync.Cond
 }
 
-// NewSemaphore returns new Semaphore, which implements a semaphore pattern.
-// It is used to limit the number of used resources to `max`. To ask for a resource
-// you firstly need to call `Asquire` and when you finish a job you need to release
-// a right for resource by calling `Release`.
-func NewSemaphore(max int) *semaphore {
+// NewSemaphore returns new Semaphore.
+func NewSemaphore(max int) *Semaphore {
 	if max <= 0 {
 		panic("number of available resources must be positive")
 	}
-	return &semaphore{
+	return &Semaphore{
 		max:  max,
 		cond: sync.NewCond(new(sync.Mutex)),
 	}
 }
 
 // Acquire locks 1 resource. Blocks if there not enought free resources
-func (s *semaphore) Acquire() {
+func (s *Semaphore) Acquire() {
 	s.AcquireN(1)
 }
 
 // AcquireN locks `n` resources. Blocks if there not enought free resources
-func (s *semaphore) AcquireN(n int) {
+func (s *Semaphore) AcquireN(n int) {
 	if n > s.max {
 		panic("can't acquire more resources then `max`=" + strconv.Itoa(s.max))
 	}
@@ -47,7 +50,7 @@ func (s *semaphore) AcquireN(n int) {
 // AcquireCancel is like AcquireN with option to send a signal to cancel the
 // request. Returns true if successful and false if cancel occurs.
 // Check `AcquireTimeout` implementation for an example use.
-func (s *semaphore) AcquireCancel(n int, cancel <-chan struct{}) bool {
+func (s *Semaphore) AcquireCancel(n int, cancel <-chan struct{}) bool {
 	var ok = make(chan struct{})
 	var notCanceled = true
 	go func() {
@@ -74,7 +77,7 @@ func (s *semaphore) AcquireCancel(n int, cancel <-chan struct{}) bool {
 // after `d` duration. If duration is super small (ns magnitude) then there is
 // a risk that a code will not have a chance to ask for resource befor timeout.
 // It's implemented using `AcquireCancel`
-func (s *semaphore) AcquireTimeout(n int, d time.Duration) bool {
+func (s *Semaphore) AcquireTimeout(n int, d time.Duration) bool {
 	timeout := make(chan struct{})
 	go func() {
 		time.Sleep(d)
@@ -84,12 +87,12 @@ func (s *semaphore) AcquireTimeout(n int, d time.Duration) bool {
 }
 
 // Release unlocks 1 resources.
-func (s *semaphore) Release() {
+func (s *Semaphore) Release() {
 	s.ReleaseN(1)
 }
 
 // ReleaseN unlocks `n` resources.
-func (s *semaphore) ReleaseN(n int) {
+func (s *Semaphore) ReleaseN(n int) {
 	s.cond.L.Lock()
 	s.acquired -= n
 	if s.acquired <= 0 {
@@ -102,7 +105,7 @@ func (s *semaphore) ReleaseN(n int) {
 }
 
 // Wait waits till all resaurces will be available
-func (s *semaphore) Wait() {
+func (s *Semaphore) Wait() {
 	s.cond.L.Lock()
 	for s.acquired != 0 {
 		s.cond.Wait()
@@ -111,7 +114,7 @@ func (s *semaphore) Wait() {
 }
 
 // Available returns number of available resources
-func (s *semaphore) Available() int {
+func (s *Semaphore) Available() int {
 	n := s.max - s.acquired
 	if n < 0 {
 		return 0
